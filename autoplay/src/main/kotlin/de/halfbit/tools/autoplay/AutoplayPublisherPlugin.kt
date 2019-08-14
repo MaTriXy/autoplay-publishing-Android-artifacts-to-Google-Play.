@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2018-2019 Sergej Shafarenka, www.halfbit.de
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package de.halfbit.tools.autoplay
 
 import com.android.build.gradle.AppExtension
@@ -7,7 +23,8 @@ import com.android.builder.model.Version
 import de.halfbit.tools.autoplay.publisher.*
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.kotlin.dsl.createTask
+import org.gradle.kotlin.dsl.invoke
+import org.gradle.kotlin.dsl.register
 import java.io.File
 import java.util.*
 
@@ -26,36 +43,69 @@ internal class PlayPublisherPlugin : Plugin<Project> {
         androidAppExtension.applicationVariants.whenObjectAdded {
             if (buildType.isDebuggable) return@whenObjectAdded
 
-            val applicationVariant = this@whenObjectAdded
-            val variantName = name.capitalize()
+            val appVariant = this
+            val variantName = appVariant.name.capitalize()
 
-            project.createTask("publishApk$variantName", PublishApkTask::class) {
-                description = "Publish $variantName apk, mapping and release-notes to Google Play."
-                group = TASK_GROUP
+            when (extension.artifactType) {
+                ArtifactType.Apk.name -> {
+                    project.tasks {
+                        register<PublishTask>("publishApk$variantName") {
+                            description = "Publish $variantName apk, mapping and release-notes to Google Play."
+                            group = TASK_GROUP
 
-                applicationId = applicationVariant.applicationId
-                artifactFiles = getArtifactFiles()
-                obfuscationMappingFile = getObfuscationMappingFile()
-                releaseTrack = extension.getReleaseTrack()
-                releaseStatus = extension.getReleaseStatus()
-                releaseNotes = extension.getReleaseNotes(project.rootDir)
-                credentials = extension.getCredentials()
+                            applicationId = appVariant.applicationId
+                            artifactType = ArtifactType.Apk
+                            artifacts = appVariant.collectArtifacts(ArtifactType.Apk, project)
+                            obfuscationMappingFile = appVariant.getObfuscationMappingFile()
+                            releaseTrack = extension.getReleaseTrack()
+                            releaseStatus = extension.getReleaseStatus()
+                            releaseNotes = extension.getReleaseNotes(project.projectDir)
+                            credentials = extension.getCredentials()
+                        }
+                    }
+                }
+
+                ArtifactType.Bundle.name -> {
+                    project.tasks {
+                        register<PublishTask>("publishBundle$variantName") {
+                            description = "Publish $variantName bundle and release-notes to Google Play."
+                            group = TASK_GROUP
+
+                            applicationId = appVariant.applicationId
+                            artifactType = ArtifactType.Bundle
+                            artifacts = appVariant.collectArtifacts(ArtifactType.Bundle, project)
+                            releaseTrack = extension.getReleaseTrack()
+                            releaseStatus = extension.getReleaseStatus()
+                            releaseNotes = extension.getReleaseNotes(project.projectDir)
+                            credentials = extension.getCredentials()
+                        }
+                    }
+                }
             }
         }
-
     }
 
     companion object {
 
         private const val MINIMAL_ANDROID_PLUGIN_VERSION = "3.0.1"
 
-        fun ApplicationVariant.getArtifactFiles(): List<File> {
-            return this.outputs
-                .filterIsInstance<ApkVariantOutput>()
-                .map { it.outputFile }
+        private fun ApplicationVariant.collectArtifacts(
+            artifactType: ArtifactType, project: Project
+        ): List<File> {
+
+            return when (artifactType) {
+                ArtifactType.Apk -> this.outputs
+                    .filterIsInstance<ApkVariantOutput>()
+                    .map { it.outputFile }
+
+                ArtifactType.Bundle -> {
+                    val archivesBaseName = project.properties["archivesBaseName"] as String
+                    listOf(File(project.buildDir, "outputs/bundle/$name/$archivesBaseName.aab"))
+                }
+            }
         }
 
-        fun ApplicationVariant.getObfuscationMappingFile(): File? {
+        private fun ApplicationVariant.getObfuscationMappingFile(): File? {
             val mapping = mappingFile
             if (mapping == null || mapping.length() == 0L) {
                 return null
@@ -63,21 +113,20 @@ internal class PlayPublisherPlugin : Plugin<Project> {
             return mapping
         }
 
-        fun AutoplayPublisherExtension.getReleaseTrack(): ReleaseTrack {
+        private fun AutoplayPublisherExtension.getReleaseTrack(): ReleaseTrack {
             return when (track) {
-                null -> error("autoplay { track } property is required.")
+                UNINITIALIZED -> error("$EXTENSION_NAME { track } property is required.")
                 ReleaseTrack.Internal.name -> ReleaseTrack.Internal
                 ReleaseTrack.Alpha.name -> ReleaseTrack.Alpha
                 ReleaseTrack.Beta.name -> ReleaseTrack.Beta
-                TRACK_ROLLOUT -> ReleaseTrack.Rollout(userFraction ?: 1.0)
+                TRACK_ROLLOUT -> ReleaseTrack.Rollout(userFraction)
                 ReleaseTrack.Production.name -> ReleaseTrack.Production
                 else -> error("Unsupported track: $track")
             }
         }
 
-        fun AutoplayPublisherExtension.getReleaseStatus(): ReleaseStatus {
+        private fun AutoplayPublisherExtension.getReleaseStatus(): ReleaseStatus {
             return when (status) {
-                null -> error("autoplay { status } property is required.")
                 ReleaseStatus.Completed.name -> ReleaseStatus.Completed
                 ReleaseStatus.Draft.name -> ReleaseStatus.Draft
                 ReleaseStatus.Halted.name -> ReleaseStatus.Halted
@@ -86,19 +135,17 @@ internal class PlayPublisherPlugin : Plugin<Project> {
             }
         }
 
-        fun AutoplayPublisherExtension.getReleaseNotes(rootDir: File): List<ReleaseNotes> {
-            val releaseNotePath = this.releaseNotesPath ?: error("autoplay { releaseNotesPath } is required.")
-            val root = File(rootDir, releaseNotePath)
-            return if (root.exists()) {
-                root.listFiles()
-                    .filter { it.isDirectory }
-                    .mapNotNull { localizedDirectory ->
-                        val file = File(localizedDirectory, "$track.txt")
-                        if (file.exists()) file else null
+        private fun AutoplayPublisherExtension.getReleaseNotes(rootDir: File): List<ReleaseNotes> {
+            val trackDirectory = File(rootDir, "$releaseNotesPath/$track")
+            return if (trackDirectory.exists()) {
+                trackDirectory.listFiles()
+                    .filter { it.isFile }
+                    .mapNotNull { localizedFile ->
+                        if (localizedFile.exists()) localizedFile else null
                     }
                     .map { releaseNoteFile ->
                         ReleaseNotes(
-                            releaseNoteFile.parentFile.name,
+                            releaseNoteFile.getLocale(),
                             releaseNoteFile
                         )
                     }
@@ -107,12 +154,16 @@ internal class PlayPublisherPlugin : Plugin<Project> {
             }
         }
 
-        fun AutoplayPublisherExtension.getCredentials(): Credentials {
-            val secretJson = Base64.getDecoder().decode(secretJsonBase64).toString(Charsets.UTF_8)
+        private fun AutoplayPublisherExtension.getCredentials(): Credentials {
+            val secretJson = if (secretJsonBase64 != null) {
+                Base64.getDecoder().decode(secretJsonBase64).toString(Charsets.UTF_8)
+            } else {
+                null
+            }
             return Credentials(secretJson, secretJsonPath)
         }
 
-        fun Project.requireAndroidAppExtension(): AppExtension {
+        private fun Project.requireAndroidAppExtension(): AppExtension {
             val current = Version.ANDROID_GRADLE_PLUGIN_VERSION
             val expected = MINIMAL_ANDROID_PLUGIN_VERSION
             if (current < expected) {
@@ -121,6 +172,14 @@ internal class PlayPublisherPlugin : Plugin<Project> {
             }
             return project.extensions.findByType(AppExtension::class.java)
                 ?: error("Required 'com.android.application' plugin must be added prior '$PLUGIN_ID' plugin.")
+        }
+
+        private fun File.getLocale(): String {
+            if (name.length < 5 || name.substring(2, 3) != "-") {
+                error("Release notes must be named using the following format:" +
+                    " <language>-<COUNTRY>.txt, e.g. en-US.txt. Found name: $this")
+            }
+            return name.substring(0, 5)
         }
 
     }

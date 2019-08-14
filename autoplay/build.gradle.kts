@@ -1,31 +1,27 @@
 plugins {
-    `java-gradle-plugin`
     `kotlin-dsl`
     `maven-publish`
     id("org.gradle.signing")
     id("org.jetbrains.dokka") version "0.9.17"
 }
 
-repositories {
-    google()
-    jcenter()
-}
-
 dependencies {
-    compileOnly("com.android.tools.build:gradle:3.0.1")
-
-    implementation(kotlin("stdlib", "1.2.51"))
-    implementation("com.google.apis:google-api-services-androidpublisher:v3-rev12-1.23.0")
+    compileOnly("com.android.tools.build:gradle:3.2.0") {
+        exclude(group = "org.jetbrains.kotlin")
+    }
+    implementation("com.google.apis:google-api-services-androidpublisher:v3-rev41-1.25.0")
 
     testImplementation("junit:junit:4.12")
     testImplementation("com.google.truth:truth:0.40")
-    testImplementation("com.android.tools.build:gradle:3.1.3")
+    testImplementation("com.android.tools.build:gradle:3.1.3") {
+        exclude(group = "org.jetbrains.kotlin")
+    }
 }
 
 gradlePlugin {
     isAutomatedPublishing = false
-    (plugins) {
-        "android-autoplay" {
+    plugins {
+        create("android-autoplay") {
             id = "android-autoplay"
             implementationClass = "de.halfbit.tools.autoplay.PlayPublisherPlugin"
         }
@@ -33,7 +29,7 @@ gradlePlugin {
 }
 
 group = "de.halfbit"
-version = "0.2.2"
+version = "3.0.0-alpha2"
 
 publishing {
 
@@ -59,7 +55,7 @@ publishing {
 
     val sourcesJar by tasks.creating(Jar::class) {
         classifier = "sources"
-        from(java.sourceSets["main"].allSource)
+        from(sourceSets["main"].allSource)
     }
 
     val javadocJar by tasks.creating(Jar::class) {
@@ -67,8 +63,8 @@ publishing {
         from(dokka)
     }
 
-    (publications) {
-        "Autoplay"(MavenPublication::class) {
+    publications {
+        create("Autoplay", MavenPublication::class) {
             from(components["java"])
             artifact(sourcesJar)
             artifact(javadocJar)
@@ -100,23 +96,21 @@ publishing {
 
 }
 
-signing {
-    sign(publishing.publications["Autoplay"])
-}
-
-fun Project.getPropertyOrEmptyString(name: String): String {
-    return if (hasProperty(name)) {
-        property(name) as String? ?: ""
-    } else {
-        ""
+if (project.hasProperty("signing.keyId")) {
+    signing {
+        sign(publishing.publications["Autoplay"])
     }
 }
+
+fun Project.getPropertyOrEmptyString(name: String): String =
+    if (hasProperty(name)) property(name) as String? ?: ""
+    else ""
 
 tasks.withType<Test> {
     addTestListener(object : TestListener {
         override fun beforeSuite(suite: TestDescriptor) {}
-        override fun beforeTest(testDescriptor: TestDescriptor) {}
         override fun afterSuite(suite: TestDescriptor, result: TestResult) {}
+        override fun beforeTest(testDescriptor: TestDescriptor) {}
         override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {
             if (result.resultType == TestResult.ResultType.FAILURE) {
                 result.exception?.printStackTrace()
