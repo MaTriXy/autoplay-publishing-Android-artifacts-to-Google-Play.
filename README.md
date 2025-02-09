@@ -3,6 +3,8 @@
 [![Gradle](https://img.shields.io/badge/gradle-5.0-blue.svg)](https://gradle.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0)
 
+Archived in favor of https://github.com/Triple-T/gradle-play-publisher
+
 <img src="https://github.com/beworker/autoplay/blob/master/publishing/autoplay-logo.png" alt="autoplay" width=200 />
 
 # Autoplay
@@ -43,11 +45,12 @@ Latest published version can be found at [![Maven central](http://img.shields.io
 
 ## Gradle compatibility
 
-Gradle Version | Autoplay Version
------------|---------------
-|4.8.x | 1.3.x|
-|4.10.x | 2.3.x|
-|5.0.x | 3.0.x|
+Autoplay Version | Gradle Version | AGP Version
+-----------|-----------|---------------
+| 1.3.x | 4.8.x |  |
+| 2.3.x | 4.10.x |  |
+| 3.0.x | 5.x, 6.x, 7.x | 3.x |
+| 4.0.x | 6.x | 4.0.x, 4.1.x |
 
 ## Publishing apk
 
@@ -145,7 +148,7 @@ Happy continuous integration!
 
 # License
 ```
-Copyright 2018-2019 Sergej Shafarenka, www.halfbit.de
+Copyright 2018-2021 Sergej Shafarenka, www.halfbit.de
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

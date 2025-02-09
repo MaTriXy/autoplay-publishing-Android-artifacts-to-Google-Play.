@@ -3,17 +3,18 @@ plugins {
     `maven-publish`
     id("org.gradle.signing")
     id("org.jetbrains.dokka") version "0.9.17"
+    kotlin("jvm").version(embeddedKotlinVersion).apply(false)
 }
 
 dependencies {
-    compileOnly("com.android.tools.build:gradle:3.2.0") {
+    compileOnly("com.android.tools.build:gradle:4.1.3") {
         exclude(group = "org.jetbrains.kotlin")
     }
-    implementation("com.google.apis:google-api-services-androidpublisher:v3-rev41-1.25.0")
+    implementation("com.google.apis:google-api-services-androidpublisher:v3-rev142-1.25.0")
 
     testImplementation("junit:junit:4.12")
     testImplementation("com.google.truth:truth:0.40")
-    testImplementation("com.android.tools.build:gradle:3.1.3") {
+    testImplementation("com.android.tools.build:gradle:4.1.3") {
         exclude(group = "org.jetbrains.kotlin")
     }
 }
@@ -29,7 +30,7 @@ gradlePlugin {
 }
 
 group = "de.halfbit"
-version = "3.0.0-alpha2"
+version = "4.0.0"
 
 publishing {
 
